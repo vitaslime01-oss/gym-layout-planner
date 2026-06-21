@@ -182,6 +182,17 @@
         .btn-view   { background: #5e35b1; }
         .btn-aisle  { background: #00838f; }
         .btn-share  { background: #3949ab; width: 100%; margin-top: 8px; }
+
+        /* 手機分頁 + 全覽 (v2.4) */
+        .mobile-tabs { display: none; }
+        @media (max-width: 768px) {
+            .mobile-tabs { display: flex; gap: 6px; margin-bottom: 8px; flex-shrink: 0; }
+            .mtab { flex: 1; background: #333; color: #fff; padding: 11px 6px; border-radius: 6px; font-size: 0.85em; }
+            .mtab.active { background: var(--accent-color); color: #111; }
+            #sidebar.tab-tools .pane-equip { display: none !important; }
+            #sidebar.tab-equip .pane-tools { display: none !important; }
+            #sidebar { height: 46vh; }
+        }
         button.active {
             outline: 2px solid var(--accent-color);
             box-shadow: 0 0 8px var(--accent-color);
@@ -360,7 +371,12 @@
     <div id="sidebar">
         <h2>🏋️ 健身房設計 Pro v2.4</h2>
 
-        <div class="control-group">
+        <div class="mobile-tabs">
+            <button id="tab-tools" class="mtab active" type="button">🛠 設定/工具</button>
+            <button id="tab-equip" class="mtab" type="button">🏋 器材庫</button>
+        </div>
+
+        <div class="control-group pane-tools">
             <div class="input-row">
                 <label>寬 (W)</label>
                 <input type="number" id="room-width" value="7" min="2" max="100" step="0.5">
@@ -370,12 +386,12 @@
             <div id="area-display">面積: 0 m² (0 坪)</div>
         </div>
 
-        <div class="action-buttons">
+        <div class="action-buttons pane-tools">
             <button id="btn-rotate" class="btn-rotate" disabled>🔄 旋轉</button>
             <button id="btn-delete-one" class="btn-delete-one" disabled>❌ 刪除</button>
         </div>
 
-        <div class="layer-buttons">
+        <div class="layer-buttons pane-tools">
             <button id="btn-layer-front" class="btn-layer" disabled title="移到最上層">⤒ 置頂</button>
             <button id="btn-layer-up" class="btn-layer" disabled title="上移一層">↑</button>
             <button id="btn-layer-down" class="btn-layer" disabled title="下移一層">↓</button>
@@ -383,7 +399,7 @@
         </div>
 
         <!-- 新增：檔案 / 視角 / 走道檢查 (v2.4) -->
-        <div class="control-group">
+        <div class="control-group pane-tools">
             <h3 style="font-size: 0.8em; color: #888; margin-bottom: 8px;">檔案 / 視角 / 檢查</h3>
             <div class="tools-grid">
                 <button id="btn-export" class="btn-export">💾 匯出</button>
@@ -400,7 +416,7 @@
         </div>
 
         <!-- 新增自訂器材 (v2.4) -->
-        <div class="control-group">
+        <div class="control-group pane-tools">
             <button id="btn-add-equip-toggle" class="btn-add">➕ 新增自訂器材</button>
             <div id="add-equip-form" style="display:none;">
                 <div class="form-row">
@@ -444,7 +460,7 @@
             </div>
         </div>
 
-        <div id="equipment-container">
+        <div id="equipment-container" class="pane-equip">
             <h3 style="font-size: 0.8em; color: #666; margin-bottom: 5px;">長按拖曳新增：</h3>
             <div class="equipment-grid">
                 <!-- 原有器材 -->
@@ -523,7 +539,7 @@
             </div>
         </div>
 
-        <button id="btn-clear-all" class="btn-clear">🗑️ 清空畫布</button>
+        <button id="btn-clear-all" class="btn-clear pane-equip">🗑️ 清空畫布</button>
     </div>
 
     <!-- 畫布區域 -->
@@ -535,6 +551,7 @@
         </div>
 
         <div class="zoom-controls">
+            <button class="zoom-btn" onclick="fitToView(3.0)" title="全覽（整場顯示）">⊡</button>
             <button class="zoom-btn" onclick="adjustZoom(0.1)">➕</button>
             <button class="zoom-btn" onclick="adjustZoom(-0.1)">➖</button>
         </div>
@@ -853,6 +870,11 @@
         });
         document.getElementById('btn-add-equip').addEventListener('click', addCustomEquip);
 
+        // 手機分頁切換（桌機不顯示分頁鈕）
+        document.getElementById('sidebar').classList.add('tab-tools');
+        document.getElementById('tab-tools').addEventListener('click', () => setMobileTab('tools'));
+        document.getElementById('tab-equip').addEventListener('click', () => setMobileTab('equip'));
+
         // Zoom (Wheel)
         document.getElementById('canvas-wrapper').addEventListener('wheel', (e) => {
             if (e.ctrlKey || e.metaKey) { // 避免與頁面滾動衝突，通常按住 Ctrl 縮放
@@ -866,6 +888,9 @@
         setupCanvasInteractions();
 
         window.addEventListener('resize', () => requestAnimationFrame(() => updateCanvasSize(false)));
+
+        // 載入後自動全覽：整個場地剛好塞進畫面（最多 1:1，不放大）
+        requestAnimationFrame(() => fitToView(1.0));
     }
 
     // --- Core: Canvas Size & Zoom ---
@@ -876,9 +901,29 @@
 
     window.adjustZoom = function(delta) {
         let newZoom = state.zoomLevel + delta;
-        newZoom = Math.max(0.5, Math.min(newZoom, 3.0)); // 限制縮放範圍 0.5x ~ 3.0x
+        newZoom = Math.max(0.15, Math.min(newZoom, 3.0)); // 縮放範圍 0.15x ~ 3.0x（手機需縮更小才看得到全場）
         state.zoomLevel = newZoom;
         updateCanvasSize(false);
+    }
+
+    // 全覽：自動算縮放讓整個場地剛好塞進畫面 (v2.4，手機關鍵)
+    window.fitToView = function(maxZ) {
+        const wrap = document.getElementById('canvas-wrapper');
+        const pad = 50;
+        const availW = Math.max(60, wrap.clientWidth - pad);
+        const availH = Math.max(60, wrap.clientHeight - pad);
+        let z = Math.min(availW / (state.roomW * BASE_SCALE), availH / (state.roomL * BASE_SCALE));
+        z = Math.max(0.15, Math.min(z, maxZ || 3.0));
+        state.zoomLevel = z;
+        updateCanvasSize(false);
+    };
+
+    function setMobileTab(which) {
+        const s = document.getElementById('sidebar');
+        s.classList.remove('tab-tools', 'tab-equip');
+        s.classList.add(which === 'equip' ? 'tab-equip' : 'tab-tools');
+        document.getElementById('tab-tools').classList.toggle('active', which !== 'equip');
+        document.getElementById('tab-equip').classList.toggle('active', which === 'equip');
     }
 
     function updateCanvasSize(fromInput = false) {
