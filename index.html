@@ -809,7 +809,7 @@
     };
 
     function init() {
-        if (!loadFromHash()) loadFromStorage(); // 分享連結優先；否則還原上次的設計
+        if (!loadFromShare()) loadFromStorage(); // 分享連結優先；否則還原上次的設計
 
         inputW.value = state.roomW;
         inputL.value = state.roomL;
@@ -1276,10 +1276,20 @@
     }
 
     // --- 分享連結 (v2.4)：把設計編碼進網址，對方開連結即見 ---
-    function buildShareUrl() {
+    // 用 ?d= 查詢參數 + URL-safe base64：短網址服務(如 TinyURL)才能正確轉址
+    // (#片段在短網址會遺失或被攔截，故不用)
+    function encodeDesign() {
         const data = { roomW: state.roomW, roomL: state.roomL, items: state.items };
-        const enc = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
-        return location.origin + location.pathname + '#d=' + enc;
+        const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+        return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+    function decodeDesign(s) {
+        let b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4) b64 += '=';
+        return JSON.parse(decodeURIComponent(escape(atob(b64))));
+    }
+    function buildShareUrl() {
+        return location.origin + location.pathname + '?d=' + encodeDesign();
     }
 
     async function shareDesign() {
@@ -1312,12 +1322,16 @@
         }
     }
 
-    function loadFromHash() {
-        const m = location.hash.match(/[#&]d=([^&]+)/);
-        if (!m) return false;
+    function loadFromShare() {
+        // 先看 ?d= 查詢參數；相容舊的 #d= 片段
+        let raw = new URLSearchParams(location.search).get('d');
+        if (!raw) {
+            const m = location.hash.match(/[#&]d=([^&]+)/);
+            if (m) raw = m[1];
+        }
+        if (!raw) return false;
         try {
-            const json = decodeURIComponent(escape(atob(m[1])));
-            applyData(JSON.parse(json));
+            applyData(decodeDesign(raw));
             persist();
             // 移除網址中的設計參數，之後重整就用本機版本(含對方的修改)
             if (history.replaceState) history.replaceState(null, '', location.pathname);
