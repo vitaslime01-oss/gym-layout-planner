@@ -1,0 +1,1778 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>健身房設計 Pro (v2.4)</title>
+    <style>
+        :root {
+            --base-scale: 60px; /* 基礎: 1公尺 = 60px */
+            --bg-color: #121212;
+            --sidebar-bg: #1e1e1e;
+            --text-color: #e0e0e0;
+            --accent-color: #ff9800;
+            --selection-color: #00e5ff;
+            --room-handle-color: #2979ff;
+            --grid-major: #444;
+            --grid-minor: #2a2a2a;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            height: 100vh;
+            height: 100dvh;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden;
+        }
+
+        /* --- 佈局 (Desktop) --- */
+        #sidebar {
+            width: 320px;
+            background-color: var(--sidebar-bg);
+            padding: 15px;
+            box-shadow: 2px 0 15px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 20;
+            overflow-y: auto;
+            flex-shrink: 0;
+            border-right: 1px solid #333;
+        }
+
+        #canvas-wrapper {
+            flex-grow: 1;
+            position: relative;
+            background-color: #0d0d0d;
+            overflow: auto; /* 允許捲動 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: none; /* JS 接管 */
+
+            /* 背景格線裝飾 */
+            background-image:
+                linear-gradient(#1a1a1a 1px, transparent 1px),
+                linear-gradient(90deg, #1a1a1a 1px, transparent 1px);
+            background-size: 20px 20px;
+
+            padding: 40px; /* 留白給手柄 */
+        }
+
+        /* --- 手機版佈局 --- */
+        @media (max-width: 768px) {
+            body { flex-direction: column; }
+
+            #canvas-wrapper {
+                order: 1;
+                flex: 1;
+                align-items: flex-start;
+                justify-content: flex-start;
+                padding: 30px;
+                border-bottom: 1px solid #333;
+            }
+
+            #sidebar {
+                order: 2;
+                width: 100%;
+                height: 40vh;
+                min-height: 250px;
+                padding: 10px;
+                box-shadow: 0 -2px 10px rgba(0,0,0,0.5);
+            }
+
+            h2 { font-size: 1rem; }
+            .equipment-grid { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); }
+        }
+
+        /* --- 元件樣式 --- */
+        h2 { margin: 0; font-size: 1.1rem; color: #fff; border-bottom: 2px solid #444; padding-bottom: 8px; }
+        h3 { margin: 0 0 8px 0; font-size: 0.9rem; color: #aaa; }
+
+        .control-group {
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            flex-shrink: 0;
+        }
+
+        .input-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+
+        label { color: #ccc; font-size: 0.85em; }
+
+        input[type="number"] {
+            width: 60px;
+            background: #111;
+            border: 1px solid #444;
+            color: #fff;
+            padding: 6px;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 16px;
+        }
+
+        #area-display {
+            text-align: right;
+            font-weight: bold;
+            color: #4CAF50;
+            font-size: 0.85em;
+            padding-top: 5px;
+            border-top: 1px dashed #444;
+        }
+
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        button {
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.9em;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+        button:disabled { opacity: 0.3; filter: grayscale(1); }
+        .btn-rotate { background: #2196F3; }
+        .btn-delete-one { background: #FF5722; }
+        .btn-clear { background: #d32f2f; width: 100%; margin-top: auto; flex-shrink: 0; }
+
+        /* 層級控制 (v2.4) */
+        .layer-buttons {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 2fr;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+        .btn-layer { background: #455a64; padding: 9px 4px; font-size: 0.8em; }
+
+        /* 新增工具按鈕 (v2.4) */
+        .tools-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .btn-export { background: #43a047; }
+        .btn-import { background: #1e88e5; }
+        .btn-view   { background: #5e35b1; }
+        .btn-aisle  { background: #00838f; }
+        button.active {
+            outline: 2px solid var(--accent-color);
+            box-shadow: 0 0 8px var(--accent-color);
+        }
+        .aisle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px dashed #444;
+        }
+        .aisle-row input { width: 60px; }
+
+        /* 新增自訂器材表單 (v2.4) */
+        .btn-add { background: #00897b; width: 100%; }
+        #add-equip-form { margin-top: 10px; }
+        .form-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .form-row > label { flex-shrink: 0; }
+        .form-row input[type="text"],
+        .form-row select {
+            flex: 1;
+            min-width: 0;
+            background: #111;
+            border: 1px solid #444;
+            color: #fff;
+            padding: 6px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .form-row input[type="color"] {
+            width: 50px; height: 32px; padding: 2px;
+            background: #111; border: 1px solid #444; border-radius: 4px;
+        }
+        /* 自訂器材卡片的移除小鈕 */
+        .equip-del {
+            position: absolute;
+            top: 1px; right: 4px;
+            color: #ff8a80;
+            font-size: 15px;
+            font-weight: bold;
+            line-height: 1;
+            cursor: pointer;
+            padding: 0 3px;
+            z-index: 2;
+        }
+        .equip-del:hover { color: #fff; }
+
+        /* 器材列表 */
+        #equipment-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            touch-action: pan-y;
+            padding-right: 2px;
+            min-height: 0;
+        }
+        #equipment-container::-webkit-scrollbar { width: 4px; }
+        #equipment-container::-webkit-scrollbar-thumb { background: #555; border-radius: 2px; }
+
+        .equipment-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            padding-bottom: 20px;
+        }
+
+        .equip-item {
+            background: #333;
+            border: 1px solid #555;
+            padding: 8px;
+            border-radius: 6px;
+            cursor: grab;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 70px;
+            position: relative;
+            touch-action: none;
+            transition: transform 0.1s;
+        }
+
+        .equip-item.pressing {
+            transform: scale(0.95);
+            background: #444;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 8px var(--accent-color);
+        }
+
+        .item-color { width: 12px; height: 12px; border-radius: 50%; margin-bottom: 4px; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+        .item-name { font-size: 0.8em; font-weight: bold; text-align: center; }
+        .item-size { font-size: 0.7em; color: #888; margin-top: 2px;}
+
+        /* 拖曳分身 */
+        .ghost-drag {
+            position: fixed;
+            pointer-events: none;
+            opacity: 0.9;
+            z-index: 9999;
+            background: #444;
+            border: 2px solid var(--accent-color);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.6);
+            transform: translate(-50%, -50%);
+        }
+
+        canvas {
+            background-color: #1a1a1a;
+            box-shadow: 0 0 40px rgba(0,0,0,0.8);
+            border: 1px solid #555;
+            display: block;
+            border-radius: 2px;
+            /* Canvas 內部邏輯接管，不允許瀏覽器預設縮放 */
+            touch-action: none;
+        }
+
+        .instruction {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 6px 10px;
+            border-radius: 20px;
+            font-size: 0.75em;
+            pointer-events: none;
+            color: #eee;
+            border: 1px solid rgba(255,255,255,0.2);
+            z-index: 50;
+            backdrop-filter: blur(4px);
+        }
+
+        /* 視圖縮放控制項 (Zoom Controls) */
+        .zoom-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 50;
+        }
+        .zoom-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(50, 50, 50, 0.9);
+            border: 1px solid #555;
+            color: white;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            padding: 0;
+        }
+        .zoom-btn:active { background: var(--accent-color); }
+
+    </style>
+</head>
+<body>
+
+    <!-- 側邊欄 -->
+    <div id="sidebar">
+        <h2>🏋️ 健身房設計 Pro v2.4</h2>
+
+        <div class="control-group">
+            <div class="input-row">
+                <label>寬 (W)</label>
+                <input type="number" id="room-width" value="7" min="2" max="100" step="0.5">
+                <label>長 (L)</label>
+                <input type="number" id="room-length" value="16" min="2" max="100" step="0.5">
+            </div>
+            <div id="area-display">面積: 0 m² (0 坪)</div>
+        </div>
+
+        <div class="action-buttons">
+            <button id="btn-rotate" class="btn-rotate" disabled>🔄 旋轉</button>
+            <button id="btn-delete-one" class="btn-delete-one" disabled>❌ 刪除</button>
+        </div>
+
+        <div class="layer-buttons">
+            <button id="btn-layer-front" class="btn-layer" disabled title="移到最上層">⤒ 置頂</button>
+            <button id="btn-layer-up" class="btn-layer" disabled title="上移一層">↑</button>
+            <button id="btn-layer-down" class="btn-layer" disabled title="下移一層">↓</button>
+            <button id="btn-layer-back" class="btn-layer" disabled title="移到最下層">⤓ 置底</button>
+        </div>
+
+        <!-- 新增：檔案 / 視角 / 走道檢查 (v2.4) -->
+        <div class="control-group">
+            <h3 style="font-size: 0.8em; color: #888; margin-bottom: 8px;">檔案 / 視角 / 檢查</h3>
+            <div class="tools-grid">
+                <button id="btn-export" class="btn-export">💾 匯出</button>
+                <button id="btn-import" class="btn-import">📂 匯入</button>
+                <button id="btn-view" class="btn-view">🧊 2.5D 視角</button>
+                <button id="btn-aisle" class="btn-aisle">🚶 走道檢查</button>
+            </div>
+            <div class="aisle-row">
+                <label>走道下限 (m)</label>
+                <input type="number" id="aisle-min" value="0.6" min="0.1" max="5" step="0.1">
+            </div>
+            <input type="file" id="file-input" accept="application/json,.json" style="display:none;">
+        </div>
+
+        <!-- 新增自訂器材 (v2.4) -->
+        <div class="control-group">
+            <button id="btn-add-equip-toggle" class="btn-add">➕ 新增自訂器材</button>
+            <div id="add-equip-form" style="display:none;">
+                <div class="form-row">
+                    <label>名稱</label>
+                    <input type="text" id="ce-name" placeholder="例: 滑輪下拉機" maxlength="8">
+                </div>
+                <div class="form-row">
+                    <label>寬 (m)</label>
+                    <input type="number" id="ce-w" value="1" min="0.5" max="20" step="0.5">
+                    <label>長 (m)</label>
+                    <input type="number" id="ce-h" value="1" min="0.5" max="20" step="0.5">
+                </div>
+                <div class="form-row">
+                    <label>高 (m, 2.5D 用)</label>
+                    <input type="number" id="ce-height" value="1.2" min="0.05" max="5" step="0.1">
+                </div>
+                <div class="form-row">
+                    <label>顏色</label>
+                    <input type="color" id="ce-color" value="#26a69a">
+                    <label>外形</label>
+                    <select id="ce-shape">
+                        <option value="box">方塊</option>
+                        <option value="machine">機台(滑輪/選重)</option>
+                        <option value="rack">深蹲/蹲舉架</option>
+                        <option value="bench">長凳/臥推椅</option>
+                        <option value="treadmill">跑步機</option>
+                        <option value="bike">腳踏車</option>
+                        <option value="platform">舉重台</option>
+                        <option value="tree">槓片車</option>
+                        <option value="barbell">槓鈴架</option>
+                        <option value="plyobox">跳箱</option>
+                        <option value="shelf">置物架</option>
+                        <option value="counter">櫃檯</option>
+                        <option value="restroom">廁所/隔間</option>
+                        <option value="lounge">休息區</option>
+                        <option value="turf">草皮/地墊</option>
+                        <option value="circle">圓形</option>
+                    </select>
+                </div>
+                <button id="btn-add-equip" class="btn-add" style="margin-top:8px;">加入器材庫</button>
+            </div>
+        </div>
+
+        <div id="equipment-container">
+            <h3 style="font-size: 0.8em; color: #666; margin-bottom: 5px;">長按拖曳新增：</h3>
+            <div class="equipment-grid">
+                <!-- 原有器材 -->
+                <div class="equip-item" data-type="keiser" data-w="2" data-h="3" data-color="#ff9800">
+                    <div class="item-color" style="background: #ff9800;"></div>
+                    <div class="item-name">Keiser FT</div>
+                    <div class="item-size">2 x 3</div>
+                </div>
+                <div class="equip-item" data-type="rack" data-w="2" data-h="2" data-color="#e57373">
+                    <div class="item-color" style="background: #e57373;"></div>
+                    <div class="item-name">深蹲架</div>
+                    <div class="item-size">2 x 2</div>
+                </div>
+                <div class="equip-item" data-type="turf" data-w="1" data-h="1" data-color="#66bb6a">
+                    <div class="item-color" style="background: #66bb6a;"></div>
+                    <div class="item-name">草皮</div>
+                    <div class="item-size">1 x 1</div>
+                </div>
+                <div class="equip-item" data-type="platform" data-w="3" data-h="2" data-color="#424242">
+                    <div class="item-color" style="background: #424242; border: 1px solid gold;"></div>
+                    <div class="item-name">舉重台</div>
+                    <div class="item-size">3 x 2</div>
+                </div>
+                <div class="equip-item" data-type="bench" data-w="1" data-h="2" data-color="#29b6f6">
+                    <div class="item-color" style="background: #29b6f6;"></div>
+                    <div class="item-name">臥推椅</div>
+                    <div class="item-size">1 x 2</div>
+                </div>
+                <div class="equip-item" data-type="storage" data-w="3" data-h="1" data-color="#8d6e63">
+                    <div class="item-color" style="background: #8d6e63;"></div>
+                    <div class="item-name">置物架</div>
+                    <div class="item-size">3 x 1</div>
+                </div>
+                <div class="equip-item" data-type="counter" data-w="2" data-h="3" data-color="#607d8b">
+                    <div class="item-color" style="background: #607d8b;"></div>
+                    <div class="item-name">櫃檯</div>
+                    <div class="item-size">2 x 3</div>
+                </div>
+                <div class="equip-item" data-type="restroom" data-w="2" data-h="3" data-color="#009688">
+                    <div class="item-color" style="background: #009688;"></div>
+                    <div class="item-name">廁所</div>
+                    <div class="item-size">2 x 3</div>
+                </div>
+                <div class="equip-item" data-type="lounge" data-w="2" data-h="4" data-color="#9c27b0">
+                    <div class="item-color" style="background: #9c27b0;"></div>
+                    <div class="item-name">休息區</div>
+                    <div class="item-size">2 x 4</div>
+                </div>
+                <div class="equip-item" data-type="platetree" data-w="2" data-h="1" data-color="#546e7a">
+                    <div class="item-color" style="background: #546e7a;"></div>
+                    <div class="item-name">槓片車</div>
+                    <div class="item-size">2 x 1</div>
+                </div>
+                <div class="equip-item" data-type="barrack" data-w="1" data-h="1" data-color="#78909c">
+                    <div class="item-color" style="background: #78909c;"></div>
+                    <div class="item-name">槓架</div>
+                    <div class="item-size">1 x 1</div>
+                </div>
+                <div class="equip-item" data-type="plyobox" data-w="1.5" data-h="1.5" data-color="#ffa726">
+                    <div class="item-color" style="background: #ffa726;"></div>
+                    <div class="item-name">跳箱</div>
+                    <div class="item-size">1.5 x 1.5</div>
+                </div>
+
+                <!-- 新增：腳踏車 & 多功能訓練站 -->
+                <div class="equip-item" data-type="bike" data-w="1" data-h="2" data-color="#00acc1">
+                    <div class="item-color" style="background: #00acc1;"></div>
+                    <div class="item-name">腳踏車</div>
+                    <div class="item-size">1 x 2</div>
+                </div>
+                <div class="equip-item" data-type="multistation" data-w="2" data-h="2" data-color="#8e24aa">
+                    <div class="item-color" style="background: #8e24aa;"></div>
+                    <div class="item-name">多功能站</div>
+                    <div class="item-size">2 x 2</div>
+                </div>
+            </div>
+        </div>
+
+        <button id="btn-clear-all" class="btn-clear">🗑️ 清空畫布</button>
+    </div>
+
+    <!-- 畫布區域 -->
+    <div id="canvas-wrapper">
+        <canvas id="gymCanvas"></canvas>
+
+        <div class="instruction">
+            右下藍點：調整場地大小
+        </div>
+
+        <div class="zoom-controls">
+            <button class="zoom-btn" onclick="adjustZoom(0.1)">➕</button>
+            <button class="zoom-btn" onclick="adjustZoom(-0.1)">➖</button>
+        </div>
+    </div>
+
+<script>
+    /**
+     * Gym Layout Planner - Pro v2.4
+     * v2.3 Features: Room Resizing (Handle), View Zooming, Mobile Optimized
+     * v2.4 新增: 存檔/讀檔(JSON+localStorage)、2.5D 等角預覽、走道過窄警示
+     */
+
+    const BASE_SCALE = 60; // 基礎: 60px = 1m
+    const GRID_STEP = 0.5;
+    const PING_FACTOR = 0.3025;
+    const HANDLE_RADIUS = 0.6; // m
+    const MIN_SIZE = 1.0;   // 場地最小邊長 (m)
+    const ITEM_MIN = 0.5;   // 物件最小邊長 (m)
+
+    // --- v2.4 常數 ---
+    const STORAGE_KEY = 'gymLayoutPlanner_v24';
+    const ISO_COS = Math.cos(Math.PI / 6); // 0.866
+    const ISO_SIN = Math.sin(Math.PI / 6); // 0.5
+    const ISO_HEIGHT_SCALE = 0.85;         // 立體高度的視覺縮放
+    const DEFAULT_HEIGHT = 1.0;            // 未知器材的預設高度(m)
+    // 各器材近似高度(m)，僅用於 2.5D 立體感，非精確值
+    const HEIGHT_MAP = {
+        keiser: 2.3, rack: 2.4, turf: 0.05, platform: 0.12, bench: 0.5,
+        storage: 1.8, counter: 1.1, restroom: 2.2, lounge: 0.45, platetree: 1.2,
+        barrack: 1.3, plyobox: 0.6, bike: 1.2, multistation: 2.2
+    };
+
+    // 內建器材 type -> 外形範本 (v2.4 擬真圖示)
+    const TYPE_SHAPE = {
+        keiser: 'machine', rack: 'rack', turf: 'turf', platform: 'platform',
+        bench: 'bench', storage: 'shelf', counter: 'counter', restroom: 'restroom',
+        lounge: 'lounge', platetree: 'tree', barrack: 'barbell', plyobox: 'plyobox',
+        bike: 'bike', multistation: 'machine'
+    };
+
+    // 自訂器材
+    const CUSTOM_KEY = 'gymCustomEquip_v24';
+    let customEquip = [];
+    let bindEquipCard = null; // 由 setupSidebarInteractions 注入，供新卡片掛事件
+
+    // 取得器材高度(2.5D 用)：自訂 > type 對照 > 預設
+    function itemHeight(it) {
+        return (typeof it.height === 'number' && it.height > 0)
+            ? it.height
+            : (HEIGHT_MAP[it.type] || DEFAULT_HEIGHT);
+    }
+    // 取得器材外形範本
+    function itemShape(it) {
+        return it.shape || TYPE_SHAPE[it.type] || 'box';
+    }
+
+    function roundRect(x, y, w, h, r) {
+        r = Math.min(r, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+    }
+
+    // === 俯視擬真圖示範本 (參考真實器材外形) ===
+    // 每個 renderer: (px,py,pw,ph,color) 在該矩形內畫出輪廓
+    const SHAPE_RENDERERS = {
+        box(px, py, pw, ph, color) {
+            ctx.fillStyle = color; ctx.fillRect(px, py, pw, ph);
+        },
+        circle(px, py, pw, ph, color) {
+            ctx.fillStyle = color;
+            ctx.beginPath(); ctx.ellipse(px + pw / 2, py + ph / 2, pw / 2, ph / 2, 0, 0, 7); ctx.fill();
+        },
+        // 深蹲/蹲舉架：外框 + 四角立柱 + 槓鈴
+        rack(px, py, pw, ph, color) {
+            ctx.fillStyle = color; ctx.fillRect(px, py, pw, ph);
+            const post = Math.min(pw, ph) * 0.2;
+            ctx.fillStyle = darken(color, 0.5);
+            [[px, py], [px + pw - post, py], [px, py + ph - post], [px + pw - post, py + ph - post]]
+                .forEach(([x, y]) => ctx.fillRect(x, y, post, post));
+            ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+            ctx.lineWidth = Math.max(2, Math.min(pw, ph) * 0.09);
+            ctx.beginPath();
+            if (pw >= ph) { const cy = py + ph / 2; ctx.moveTo(px + post, cy); ctx.lineTo(px + pw - post, cy); }
+            else { const cx = px + pw / 2; ctx.moveTo(cx, py + post); ctx.lineTo(cx, py + ph - post); }
+            ctx.stroke();
+        },
+        // 機台 (滑輪 / 選重)：重量片堆 + 纜繩
+        machine(px, py, pw, ph, color) {
+            ctx.fillStyle = color; ctx.fillRect(px, py, pw, ph);
+            ctx.fillStyle = darken(color, 0.5);
+            if (pw >= ph) {
+                const sw = pw * 0.3; ctx.fillRect(px, py, sw, ph);
+                ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1;
+                for (let i = 1; i < 6; i++) { const yy = py + ph * i / 6; ctx.beginPath(); ctx.moveTo(px + 2, yy); ctx.lineTo(px + sw - 2, yy); ctx.stroke(); }
+                ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(px + sw, py + ph / 2); ctx.lineTo(px + pw * 0.82, py + ph / 2); ctx.stroke();
+            } else {
+                const sh = ph * 0.3; ctx.fillRect(px, py, pw, sh);
+                ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1;
+                for (let i = 1; i < 6; i++) { const xx = px + pw * i / 6; ctx.beginPath(); ctx.moveTo(xx, py + 2); ctx.lineTo(xx, py + sh - 2); ctx.stroke(); }
+                ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(px + pw / 2, py + sh); ctx.lineTo(px + pw / 2, py + ph * 0.82); ctx.stroke();
+            }
+        },
+        // 長凳 / 臥推椅：椅墊 + 椅腳
+        bench(px, py, pw, ph, color) {
+            ctx.fillStyle = darken(color, 0.28); ctx.fillRect(px, py, pw, ph);
+            ctx.fillStyle = color;
+            const r = Math.min(pw, ph) * 0.3;
+            if (pw >= ph) { roundRect(px + pw * 0.08, py + ph * 0.22, pw * 0.84, ph * 0.56, r); ctx.fill(); }
+            else { roundRect(px + pw * 0.22, py + ph * 0.08, pw * 0.56, ph * 0.84, r); ctx.fill(); }
+            ctx.fillStyle = darken(color, 0.5);
+            const f = Math.min(pw, ph) * 0.14;
+            ctx.fillRect(px, py, f, f); ctx.fillRect(px + pw - f, py, f, f);
+            ctx.fillRect(px, py + ph - f, f, f); ctx.fillRect(px + pw - f, py + ph - f, f, f);
+        },
+        // 跑步機：面板 + 跑帶橫條
+        treadmill(px, py, pw, ph, color) {
+            ctx.fillStyle = color; ctx.fillRect(px, py, pw, ph);
+            ctx.fillStyle = darken(color, 0.5);
+            if (ph >= pw) {
+                const ch = ph * 0.18; ctx.fillRect(px, py, pw, ch);
+                ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1;
+                for (let i = 1; i < 8; i++) { const yy = py + ch + (ph - ch) * i / 8; ctx.beginPath(); ctx.moveTo(px + pw * 0.12, yy); ctx.lineTo(px + pw * 0.88, yy); ctx.stroke(); }
+            } else {
+                const cw = pw * 0.18; ctx.fillRect(px, py, cw, ph);
+                ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1;
+                for (let i = 1; i < 8; i++) { const xx = px + cw + (pw - cw) * i / 8; ctx.beginPath(); ctx.moveTo(xx, py + ph * 0.12); ctx.lineTo(xx, py + ph * 0.88); ctx.stroke(); }
+            }
+        },
+        // 腳踏車：飛輪 + 座墊 + 手把
+        bike(px, py, pw, ph, color) {
+            ctx.fillStyle = darken(color, 0.25); ctx.fillRect(px, py, pw, ph);
+            const cx = px + pw / 2, cy = py + ph / 2, mn = Math.min(pw, ph);
+            ctx.strokeStyle = darken(color, 0.5); ctx.lineWidth = Math.max(2, mn * 0.12);
+            if (ph >= pw) {
+                ctx.beginPath(); ctx.moveTo(cx, py + ph * 0.22); ctx.lineTo(cx, py + ph * 0.78); ctx.stroke();
+                ctx.fillStyle = darken(color, 0.55); ctx.beginPath(); ctx.arc(cx, py + ph * 0.2, mn * 0.26, 0, 7); ctx.fill();
+                ctx.fillStyle = color; roundRect(cx - pw * 0.16, py + ph * 0.72, pw * 0.32, ph * 0.12, 3); ctx.fill();
+                ctx.strokeStyle = darken(color, 0.5); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx - pw * 0.2, py + ph * 0.3); ctx.lineTo(cx + pw * 0.2, py + ph * 0.3); ctx.stroke();
+            } else {
+                ctx.beginPath(); ctx.moveTo(px + pw * 0.22, cy); ctx.lineTo(px + pw * 0.78, cy); ctx.stroke();
+                ctx.fillStyle = darken(color, 0.55); ctx.beginPath(); ctx.arc(px + pw * 0.2, cy, mn * 0.26, 0, 7); ctx.fill();
+                ctx.fillStyle = color; roundRect(px + pw * 0.72, cy - ph * 0.16, pw * 0.12, ph * 0.32, 3); ctx.fill();
+                ctx.strokeStyle = darken(color, 0.5); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(px + pw * 0.3, cy - ph * 0.2); ctx.lineTo(px + pw * 0.3, cy + ph * 0.2); ctx.stroke();
+            }
+        },
+        // 舉重台：木板紋 + 中央金屬條
+        platform(px, py, pw, ph, color) {
+            ctx.fillStyle = color; ctx.fillRect(px, py, pw, ph);
+            ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1;
+            if (pw >= ph) {
+                for (let i = 1; i < 6; i++) { const xx = px + pw * i / 6; ctx.beginPath(); ctx.moveTo(xx, py); ctx.lineTo(xx, py + ph); ctx.stroke(); }
+                ctx.fillStyle = darken(color, 0.45); ctx.fillRect(px + pw * 0.38, py, pw * 0.24, ph);
+            } else {
+                for (let i = 1; i < 6; i++) { const yy = py + ph * i / 6; ctx.beginPath(); ctx.moveTo(px, yy); ctx.lineTo(px + pw, yy); ctx.stroke(); }
+                ctx.fillStyle = darken(color, 0.45); ctx.fillRect(px, py + ph * 0.38, pw, ph * 0.24);
+            }
+        },
+        // 槓片車：同心圓(疊放槓片)
+        tree(px, py, pw, ph, color) {
+            ctx.fillStyle = color; ctx.fillRect(px, py, pw, ph);
+            const cx = px + pw / 2, cy = py + ph / 2, R = Math.min(pw, ph) * 0.42;
+            ctx.strokeStyle = darken(color, 0.5); ctx.lineWidth = 2;
+            [R, R * 0.72, R * 0.46].forEach(r => { ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.stroke(); });
+            ctx.fillStyle = darken(color, 0.55); ctx.beginPath(); ctx.arc(cx, cy, R * 0.2, 0, 7); ctx.fill();
+        },
+        // 槓鈴架：數根平行槓
+        barbell(px, py, pw, ph, color) {
+            ctx.fillStyle = color; ctx.fillRect(px, py, pw, ph);
+            ctx.strokeStyle = darken(color, 0.5); ctx.lineWidth = Math.max(2, Math.min(pw, ph) * 0.12);
+            const n = 3;
+            if (pw >= ph) { for (let i = 1; i <= n; i++) { const yy = py + ph * i / (n + 1); ctx.beginPath(); ctx.moveTo(px + pw * 0.1, yy); ctx.lineTo(px + pw * 0.9, yy); ctx.stroke(); } }
+            else { for (let i = 1; i <= n; i++) { const xx = px + pw * i / (n + 1); ctx.beginPath(); ctx.moveTo(xx, py + ph * 0.1); ctx.lineTo(xx, py + ph * 0.9); ctx.stroke(); } }
+        },
+        // 跳箱：外框 + 內框 + 角線(立體感)
+        plyobox(px, py, pw, ph, color) {
+            ctx.fillStyle = color; ctx.fillRect(px, py, pw, ph);
+            ctx.strokeStyle = darken(color, 0.5); ctx.lineWidth = 2;
+            const ins = Math.min(pw, ph) * 0.18;
+            ctx.strokeRect(px + ins, py + ins, pw - 2 * ins, ph - 2 * ins);
+            ctx.beginPath();
+            ctx.moveTo(px, py); ctx.lineTo(px + ins, py + ins);
+            ctx.moveTo(px + pw, py); ctx.lineTo(px + pw - ins, py + ins);
+            ctx.moveTo(px, py + ph); ctx.lineTo(px + ins, py + ph - ins);
+            ctx.moveTo(px + pw, py + ph); ctx.lineTo(px + pw - ins, py + ph - ins);
+            ctx.stroke();
+        },
+        // 置物架：分隔層
+        shelf(px, py, pw, ph, color) {
+            ctx.fillStyle = color; ctx.fillRect(px, py, pw, ph);
+            ctx.strokeStyle = darken(color, 0.5); ctx.lineWidth = 1.5;
+            if (pw >= ph) { for (let i = 1; i < 4; i++) { const xx = px + pw * i / 4; ctx.beginPath(); ctx.moveTo(xx, py); ctx.lineTo(xx, py + ph); ctx.stroke(); } }
+            else { for (let i = 1; i < 4; i++) { const yy = py + ph * i / 4; ctx.beginPath(); ctx.moveTo(px, yy); ctx.lineTo(px + pw, yy); ctx.stroke(); } }
+        },
+        // 櫃檯：內檯面框
+        counter(px, py, pw, ph, color) {
+            ctx.fillStyle = color; ctx.fillRect(px, py, pw, ph);
+            ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 2;
+            ctx.strokeRect(px + pw * 0.12, py + ph * 0.12, pw * 0.76, ph * 0.76);
+        },
+        // 廁所 / 隔間：門弧 + 馬桶
+        restroom(px, py, pw, ph, color) {
+            ctx.fillStyle = color; ctx.fillRect(px, py, pw, ph);
+            ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.5;
+            const d = Math.min(pw, ph) * 0.5;
+            ctx.beginPath(); ctx.moveTo(px, py + ph); ctx.lineTo(px + d, py + ph); ctx.stroke();
+            ctx.beginPath(); ctx.arc(px, py + ph, d, -Math.PI / 2, 0); ctx.stroke();
+            ctx.fillStyle = darken(color, 0.3);
+            ctx.beginPath(); ctx.ellipse(px + pw * 0.72, py + ph * 0.32, pw * 0.14, ph * 0.12, 0, 0, 7); ctx.fill();
+        },
+        // 休息區：沙發 + 茶几
+        lounge(px, py, pw, ph, color) {
+            ctx.fillStyle = darken(color, 0.22); ctx.fillRect(px, py, pw, ph);
+            ctx.fillStyle = color;
+            const mn = Math.min(pw, ph);
+            if (pw >= ph) {
+                roundRect(px + pw * 0.05, py + ph * 0.1, pw * 0.3, ph * 0.8, mn * 0.12); ctx.fill();
+                ctx.fillStyle = darken(color, 0.45); ctx.beginPath(); ctx.arc(px + pw * 0.62, py + ph * 0.5, mn * 0.18, 0, 7); ctx.fill();
+            } else {
+                roundRect(px + pw * 0.1, py + ph * 0.05, pw * 0.8, ph * 0.3, mn * 0.12); ctx.fill();
+                ctx.fillStyle = darken(color, 0.45); ctx.beginPath(); ctx.arc(px + pw * 0.5, py + ph * 0.62, mn * 0.18, 0, 7); ctx.fill();
+            }
+        },
+        // 草皮 / 地墊：條紋
+        turf(px, py, pw, ph, color) {
+            ctx.fillStyle = color; ctx.fillRect(px, py, pw, ph);
+            ctx.strokeStyle = 'rgba(0,0,0,0.16)'; ctx.lineWidth = 1;
+            for (let i = 1; i < 5; i++) { const xx = px + pw * i / 5; ctx.beginPath(); ctx.moveTo(xx, py); ctx.lineTo(xx, py + ph); ctx.stroke(); }
+        }
+    };
+
+    function drawEquipmentSymbol(item, px, py, pw, ph) {
+        const r = SHAPE_RENDERERS[itemShape(item)] || SHAPE_RENDERERS.box;
+        r(px, py, pw, ph, item.color || '#888');
+    }
+
+    // DOM
+    const canvas = document.getElementById('gymCanvas');
+    const ctx = canvas.getContext('2d');
+    const inputW = document.getElementById('room-width');
+    const inputL = document.getElementById('room-length');
+    const areaText = document.getElementById('area-display');
+    const sidebarItems = document.querySelectorAll('.equip-item');
+    const btnRotate = document.getElementById('btn-rotate');
+    const btnDeleteOne = document.getElementById('btn-delete-one');
+    const btnClearAll = document.getElementById('btn-clear-all');
+    const btnsLayer = ['front', 'up', 'down', 'back'].map(k => document.getElementById('btn-layer-' + k));
+
+    // State
+    let state = {
+        roomW: 7,
+        roomL: 16,
+        items: [],
+        selectedIndex: -1,
+
+        zoomLevel: 1.0, // 視圖縮放比例
+
+        // v2.4
+        view: '2d',        // '2d' | 'iso'
+        showAisle: false,  // 走道檢查開關
+        aisleMin: 0.6,     // 走道下限(m)
+        isoOrigin: { x: 0, y: 0 }, // 等角投影原點(由 updateCanvasSize 計算)
+
+        mode: 'none', // 'drag-item', 'resize-item', 'resize-room'
+        targetIndex: -1,
+        startPos: { x: 0, y: 0 },
+        originalItemState: { x: 0, y: 0, w: 0, h: 0 },
+    };
+
+    function init() {
+        loadFromStorage(); // 先還原上次的設計
+
+        inputW.value = state.roomW;
+        inputL.value = state.roomL;
+
+        updateInstruction();
+        updateCanvasSize();
+
+        // Listeners
+        inputW.addEventListener('change', () => updateCanvasSize(true));
+        inputL.addEventListener('change', () => updateCanvasSize(true));
+
+        btnRotate.addEventListener('click', rotateSelectedItem);
+        btnDeleteOne.addEventListener('click', deleteSelectedItem);
+        btnClearAll.addEventListener('click', clearAllItems);
+
+        // 層級控制
+        document.getElementById('btn-layer-front').addEventListener('click', () => moveLayer('front'));
+        document.getElementById('btn-layer-up').addEventListener('click', () => moveLayer('up'));
+        document.getElementById('btn-layer-down').addEventListener('click', () => moveLayer('down'));
+        document.getElementById('btn-layer-back').addEventListener('click', () => moveLayer('back'));
+
+        // --- v2.4 工具 ---
+        document.getElementById('btn-export').addEventListener('click', exportJSON);
+        document.getElementById('btn-import').addEventListener('click', () => document.getElementById('file-input').click());
+        document.getElementById('file-input').addEventListener('change', importJSON);
+        document.getElementById('btn-view').addEventListener('click', toggleView);
+        document.getElementById('btn-aisle').addEventListener('click', toggleAisle);
+        const aisleInput = document.getElementById('aisle-min');
+        aisleInput.value = state.aisleMin;
+        aisleInput.addEventListener('change', () => {
+            state.aisleMin = Math.max(0.1, parseFloat(aisleInput.value) || 0.6);
+            aisleInput.value = state.aisleMin;
+            draw();
+        });
+
+        // 新增自訂器材表單
+        document.getElementById('btn-add-equip-toggle').addEventListener('click', () => {
+            const f = document.getElementById('add-equip-form');
+            f.style.display = (f.style.display === 'none' || !f.style.display) ? 'block' : 'none';
+        });
+        document.getElementById('btn-add-equip').addEventListener('click', addCustomEquip);
+
+        // Zoom (Wheel)
+        document.getElementById('canvas-wrapper').addEventListener('wheel', (e) => {
+            if (e.ctrlKey || e.metaKey) { // 避免與頁面滾動衝突，通常按住 Ctrl 縮放
+                e.preventDefault();
+                adjustZoom(e.deltaY > 0 ? -0.1 : 0.1);
+            }
+        });
+
+        setupSidebarInteractions();
+        loadCustomEquip(); // 還原使用者自訂器材 (需在 setupSidebarInteractions 後，bindEquipCard 已就緒)
+        setupCanvasInteractions();
+
+        window.addEventListener('resize', () => requestAnimationFrame(() => updateCanvasSize(false)));
+    }
+
+    // --- Core: Canvas Size & Zoom ---
+
+    function getPixelsPerMeter() {
+        return BASE_SCALE * state.zoomLevel;
+    }
+
+    window.adjustZoom = function(delta) {
+        let newZoom = state.zoomLevel + delta;
+        newZoom = Math.max(0.5, Math.min(newZoom, 3.0)); // 限制縮放範圍 0.5x ~ 3.0x
+        state.zoomLevel = newZoom;
+        updateCanvasSize(false);
+    }
+
+    function updateCanvasSize(fromInput = false) {
+        if (fromInput) {
+            let w = parseFloat(inputW.value) || 2;
+            let l = parseFloat(inputL.value) || 2;
+            w = Math.max(MIN_SIZE, Math.round(w / 0.5) * 0.5);
+            l = Math.max(MIN_SIZE, Math.round(l / 0.5) * 0.5);
+            state.roomW = w;
+            state.roomL = l;
+            inputW.value = w;
+            inputL.value = l;
+            clampItemsToRoom(); // 縮小場地時把超出牆外的器材推回
+            persist();
+        }
+
+        const ppm = getPixelsPerMeter(); // 當前每公尺多少像素
+        const dpr = window.devicePixelRatio || 1;
+
+        let cssW, cssH;
+
+        if (state.view === 'iso') {
+            // 等角投影所需畫布尺寸
+            const cos = ISO_COS * ppm;
+            const sin = ISO_SIN * ppm;
+            const pad = 60;
+            const floorPxW = (state.roomW + state.roomL) * cos;
+            const floorPxH = (state.roomW + state.roomL) * sin;
+
+            let maxH = DEFAULT_HEIGHT;
+            state.items.forEach(it => {
+                const h = itemHeight(it);
+                if (h > maxH) maxH = h;
+            });
+            const headroom = maxH * ppm * ISO_HEIGHT_SCALE;
+
+            cssW = floorPxW + pad * 2;
+            cssH = floorPxH + headroom + pad * 2;
+            state.isoOrigin = { x: state.roomL * cos + pad, y: headroom + pad };
+        } else {
+            cssW = state.roomW * ppm;
+            cssH = state.roomL * ppm;
+        }
+
+        canvas.width = cssW * dpr;
+        canvas.height = cssH * dpr;
+        canvas.style.width = cssW + 'px';
+        canvas.style.height = cssH + 'px';
+        ctx.setTransform(1, 0, 0, 1, 0, 0); // 重置避免 scale 疊加
+        ctx.scale(dpr, dpr);
+
+        // Update Area Text
+        const areaM2 = (state.roomW * state.roomL).toFixed(2);
+        const areaPing = (areaM2 * PING_FACTOR).toFixed(2);
+        areaText.textContent = `面積: ${areaM2} m² (${areaPing} 坪)`;
+
+        draw();
+    }
+
+    // --- Render dispatcher ---
+    function draw() {
+        if (state.view === 'iso') drawIso();
+        else draw2D();
+        updateButtonsUI();
+    }
+
+    function draw2D() {
+        const ppm = getPixelsPerMeter();
+        const viewW = state.roomW * ppm;
+        const viewH = state.roomL * ppm;
+
+        // Clear
+        ctx.clearRect(0, 0, viewW, viewH);
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, viewW, viewH);
+
+        // Grid (Adaptive)
+        ctx.lineWidth = 1;
+        // 根據縮放等級決定是否顯示 0.5m 線
+        const showMinor = state.zoomLevel > 0.6;
+
+        for (let m = 0; m <= state.roomW; m += 0.5) {
+            if (!showMinor && m % 1 !== 0) continue;
+            const x = m * ppm;
+            ctx.strokeStyle = (m % 1 === 0) ? '#444' : '#2a2a2a';
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, viewH); ctx.stroke();
+        }
+        for (let m = 0; m <= state.roomL; m += 0.5) {
+            if (!showMinor && m % 1 !== 0) continue;
+            const y = m * ppm;
+            ctx.strokeStyle = (m % 1 === 0) ? '#444' : '#2a2a2a';
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(viewW, y); ctx.stroke();
+        }
+
+        // Items —— 嚴格依陣列順序(後者在上)，層級由「層級」按鈕控制
+        const drawOneItem = (item, index) => {
+            const pxX = item.x * ppm;
+            const pxY = item.y * ppm;
+            const pxW = item.w * ppm;
+            const pxH = item.h * ppm;
+
+            const isSelected = (index === state.selectedIndex);
+
+            // 擬真俯視圖示 (v2.4)
+            drawEquipmentSymbol(item, pxX, pxY, pxW, pxH);
+
+            // Border (圓形不畫未選取外框，避免方框框住圓)
+            if (isSelected || itemShape(item) !== 'circle') {
+                ctx.lineWidth = isSelected ? 3 : 1.5;
+                ctx.strokeStyle = isSelected ? '#00e5ff' : 'rgba(0,0,0,0.55)';
+                ctx.strokeRect(pxX, pxY, pxW, pxH);
+            }
+
+            // Item Resize Handle (White) - Only if zoomed in enough
+            if (isSelected && state.zoomLevel > 0.5) {
+                ctx.fillStyle = '#fff';
+                ctx.strokeStyle = '#00e5ff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(pxX + pxW, pxY + pxH, 6 * state.zoomLevel, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            }
+
+            // 名稱底牌（避免蓋住圖示又保持可讀）
+            if (pxW > 30 && pxH > 22) {
+                const fontSize = Math.max(10, 12 * state.zoomLevel);
+                ctx.font = `bold ${fontSize}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const tw = ctx.measureText(item.label).width;
+                const lx = pxX + pxW / 2;
+                const ly = pxY + pxH / 2;
+                const padX = 5, bh = fontSize + 6;
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                roundRect(lx - tw / 2 - padX, ly - bh / 2, tw + padX * 2, bh, 4);
+                ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.fillText(item.label, lx, ly);
+            }
+        };
+        // 拖曳中的物件延後畫在最上層，方便看清楚移動；放開後回到真實層級
+        const deferIdx = (state.mode === 'drag-item') ? state.targetIndex : -1;
+        state.items.forEach((item, index) => { if (index !== deferIdx) drawOneItem(item, index); });
+        if (deferIdx >= 0 && state.items[deferIdx]) drawOneItem(state.items[deferIdx], deferIdx);
+
+        // 走道檢查 (v2.4) — 畫在器材上方
+        if (state.showAisle) drawAisleWarnings(ppm);
+
+        // --- Room Resize Handle (Bottom-Right) ---
+        // 畫一個顯眼的三角形區域
+        const handleSize = 40 * state.zoomLevel;
+        ctx.beginPath();
+        ctx.moveTo(viewW - handleSize, viewH);
+        ctx.lineTo(viewW, viewH - handleSize);
+        ctx.lineTo(viewW, viewH);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(41, 121, 255, 0.3)';
+        ctx.fill();
+
+        // 藍色控制點
+        ctx.beginPath();
+        ctx.arc(viewW - (10 * state.zoomLevel), viewH - (10 * state.zoomLevel), 8 * state.zoomLevel, 0, Math.PI * 2);
+        ctx.fillStyle = '#2979ff';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
+    }
+
+    // --- 走道過窄警示 (v2.4) ---
+    function drawAisleWarnings(ppm) {
+        const items = state.items;
+        const min = state.aisleMin;
+        ctx.save();
+        for (let i = 0; i < items.length; i++) {
+            for (let j = i + 1; j < items.length; j++) {
+                const A = items[i], B = items[j];
+
+                // 水平走道（兩物在 Y 方向重疊，X 之間有縫）
+                const yOv = Math.min(A.y + A.h, B.y + B.h) - Math.max(A.y, B.y);
+                if (yOv > 0.01) {
+                    let gap = -1, gx = 0;
+                    if (A.x + A.w <= B.x) { gap = B.x - (A.x + A.w); gx = A.x + A.w; }
+                    else if (B.x + B.w <= A.x) { gap = A.x - (B.x + B.w); gx = B.x + B.w; }
+                    if (gap > 0.01 && gap < min) {
+                        const yTop = Math.max(A.y, B.y);
+                        drawAisleBand(gx * ppm, yTop * ppm, gap * ppm, yOv * ppm, gap);
+                    }
+                }
+
+                // 垂直走道（兩物在 X 方向重疊，Y 之間有縫）
+                const xOv = Math.min(A.x + A.w, B.x + B.w) - Math.max(A.x, B.x);
+                if (xOv > 0.01) {
+                    let gap = -1, gy = 0;
+                    if (A.y + A.h <= B.y) { gap = B.y - (A.y + A.h); gy = A.y + A.h; }
+                    else if (B.y + B.h <= A.y) { gap = A.y - (B.y + B.h); gy = B.y + B.h; }
+                    if (gap > 0.01 && gap < min) {
+                        const xLeft = Math.max(A.x, B.x);
+                        drawAisleBand(xLeft * ppm, gy * ppm, xOv * ppm, gap * ppm, gap);
+                    }
+                }
+            }
+        }
+        ctx.restore();
+    }
+
+    function drawAisleBand(px, py, pw, ph, gapM) {
+        ctx.fillStyle = 'rgba(255, 40, 40, 0.30)';
+        ctx.fillRect(px, py, pw, ph);
+        ctx.strokeStyle = 'rgba(255, 90, 90, 0.95)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.strokeRect(px, py, pw, ph);
+        ctx.setLineDash([]);
+        if (pw > 16 && ph > 16) {
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 11px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(gapM.toFixed(2) + 'm', px + pw / 2, py + ph / 2);
+        }
+    }
+
+    // --- 2.5D 等角預覽 (v2.4，唯讀) ---
+    function drawIso() {
+        const ppm = getPixelsPerMeter();
+        const cos = ISO_COS * ppm;
+        const sin = ISO_SIN * ppm;
+        const dpr = window.devicePixelRatio || 1;
+        const W = canvas.width / dpr;
+        const H = canvas.height / dpr;
+        const o = state.isoOrigin;
+        const proj = (mx, my) => ({ x: (mx - my) * cos + o.x, y: (mx + my) * sin + o.y });
+
+        ctx.clearRect(0, 0, W, H);
+
+        // 地板菱形
+        const c00 = proj(0, 0), c10 = proj(state.roomW, 0),
+              c11 = proj(state.roomW, state.roomL), c01 = proj(0, state.roomL);
+        ctx.beginPath();
+        ctx.moveTo(c00.x, c00.y); ctx.lineTo(c10.x, c10.y);
+        ctx.lineTo(c11.x, c11.y); ctx.lineTo(c01.x, c01.y); ctx.closePath();
+        ctx.fillStyle = '#1a1a1a'; ctx.fill();
+        ctx.strokeStyle = '#666'; ctx.lineWidth = 1.5; ctx.stroke();
+
+        // 1m 格線
+        ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.lineWidth = 1;
+        for (let m = 1; m < state.roomW; m++) {
+            const a = proj(m, 0), b = proj(m, state.roomL);
+            ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        }
+        for (let m = 1; m < state.roomL; m++) {
+            const a = proj(0, m), b = proj(state.roomW, m);
+            ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        }
+
+        // 器材：由遠到近排序（畫家演算法）
+        const sorted = state.items.slice().sort((p, q) => (p.x + p.y) - (q.x + q.y));
+        sorted.forEach(it => drawIsoBox(it, proj, ppm));
+    }
+
+    function drawIsoBox(it, proj, ppm) {
+        const hM = itemHeight(it);
+        const hz = hM * ppm * ISO_HEIGHT_SCALE; // 螢幕上往上的像素高
+        const base = it.color || '#888';
+
+        // 底面四角
+        const b00 = proj(it.x, it.y), b10 = proj(it.x + it.w, it.y),
+              b11 = proj(it.x + it.w, it.y + it.h), b01 = proj(it.x, it.y + it.h);
+        // 頂面四角（上移 hz）
+        const up = (p) => ({ x: p.x, y: p.y - hz });
+        const t00 = up(b00), t10 = up(b10), t11 = up(b11), t01 = up(b01);
+
+        // 右側面 (東)
+        ctx.fillStyle = darken(base, 0.28);
+        fillPoly([b10, b11, t11, t10]);
+        // 前側面 (南)
+        ctx.fillStyle = darken(base, 0.45);
+        fillPoly([b01, b11, t11, t01]);
+        // 頂面
+        ctx.fillStyle = base;
+        fillPoly([t00, t10, t11, t01]);
+
+        // 邊框
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+        ctx.lineWidth = 1;
+        strokePoly([t00, t10, t11, t01]);
+        strokePoly([b10, b11, t11, t10]);
+        strokePoly([b01, b11, t11, t01]);
+
+        // 標籤（頂面中心）
+        if (ppm > 28) {
+            const cx = (t00.x + t11.x) / 2;
+            const cy = (t00.y + t11.y) / 2;
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold ' + Math.max(9, Math.round(11 * state.zoomLevel)) + 'px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(it.label, cx, cy);
+        }
+    }
+
+    function fillPoly(pts) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.closePath();
+        ctx.fill();
+    }
+    function strokePoly(pts) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.closePath();
+        ctx.stroke();
+    }
+    function darken(hex, amt) {
+        const h = hex.replace('#', '');
+        if (h.length < 6) return hex;
+        let r = parseInt(h.substring(0, 2), 16);
+        let g = parseInt(h.substring(2, 4), 16);
+        let b = parseInt(h.substring(4, 6), 16);
+        r = Math.round(r * (1 - amt));
+        g = Math.round(g * (1 - amt));
+        b = Math.round(b * (1 - amt));
+        return `rgb(${r},${g},${b})`;
+    }
+
+    // --- 視角 / 走道 切換 (v2.4) ---
+    function toggleView() {
+        state.view = (state.view === '2d') ? 'iso' : '2d';
+        const btn = document.getElementById('btn-view');
+        btn.classList.toggle('active', state.view === 'iso');
+        btn.innerHTML = (state.view === 'iso') ? '✏️ 2D 編輯' : '🧊 2.5D 視角';
+        state.selectedIndex = -1; // 進 iso 取消選取
+        updateInstruction();
+        updateCanvasSize(false);
+    }
+
+    function toggleAisle() {
+        state.showAisle = !state.showAisle;
+        const btn = document.getElementById('btn-aisle');
+        btn.classList.toggle('active', state.showAisle);
+        // 走道檢查只在 2D 有意義；若在 iso 就切回 2D
+        if (state.showAisle && state.view === 'iso') {
+            toggleView();
+        } else {
+            draw();
+        }
+    }
+
+    function updateInstruction() {
+        const el = document.querySelector('.instruction');
+        if (!el) return;
+        el.textContent = (state.view === 'iso')
+            ? '2.5D 預覽（唯讀）· 切回 2D 可編輯'
+            : '右下藍點：調整場地大小 · 雙擊器材可刪除';
+    }
+
+    // --- 存檔 / 讀檔 (v2.4) ---
+    function persist() {
+        try {
+            const data = { roomW: state.roomW, roomL: state.roomL, items: state.items };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        } catch (e) { /* localStorage 不可用時靜默 */ }
+    }
+
+    function loadFromStorage() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) applyData(JSON.parse(raw));
+        } catch (e) { /* 忽略損壞資料 */ }
+    }
+
+    function applyData(data) {
+        if (!data || typeof data !== 'object') return;
+        if (typeof data.roomW === 'number') state.roomW = data.roomW;
+        if (typeof data.roomL === 'number') state.roomL = data.roomL;
+        if (Array.isArray(data.items)) {
+            state.items = data.items.map(it => ({
+                id: it.id || (Date.now() + Math.floor(Math.random() * 100000)),
+                x: +it.x || 0, y: +it.y || 0,
+                w: +it.w || 1, h: +it.h || 1,
+                color: it.color || '#888',
+                label: it.label || '器材',
+                type: it.type || '',
+                shape: it.shape || '',
+                height: (typeof it.height === 'number' ? it.height : undefined)
+            }));
+        }
+        state.selectedIndex = -1;
+        inputW.value = state.roomW;
+        inputL.value = state.roomL;
+    }
+
+    function exportJSON() {
+        const data = {
+            roomW: state.roomW,
+            roomL: state.roomL,
+            items: state.items,
+            savedAt: new Date().toISOString()
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'gym-layout.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    }
+
+    function importJSON(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                applyData(JSON.parse(ev.target.result));
+                persist();
+                updateCanvasSize(false);
+            } catch (err) {
+                alert('檔案格式錯誤，無法載入');
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = ''; // 允許再次匯入同檔
+    }
+
+    function updateButtonsUI() {
+        const hasSelection = state.selectedIndex !== -1;
+        btnRotate.disabled = !hasSelection;
+        btnDeleteOne.disabled = !hasSelection;
+        btnRotate.style.opacity = hasSelection ? '1' : '0.5';
+        btnDeleteOne.style.opacity = hasSelection ? '1' : '0.5';
+        btnsLayer.forEach(b => {
+            if (!b) return;
+            b.disabled = !hasSelection;
+            b.style.opacity = hasSelection ? '1' : '0.5';
+        });
+    }
+
+    // --- Sidebar Drag Logic (分身) ---
+    function setupSidebarInteractions() {
+        let ghost = null;
+        let activeTouchId = null;
+        let dragItemData = null;
+        let pressTimer = null;
+        let startX = 0, startY = 0;
+
+        const createGhost = (x, y, data) => {
+            const ppm = getPixelsPerMeter();
+            ghost = document.createElement('div');
+            ghost.className = 'ghost-drag';
+            ghost.style.width = (data.w * ppm) + 'px';
+            ghost.style.height = (data.h * ppm) + 'px';
+            ghost.textContent = data.label;
+            ghost.style.backgroundColor = data.color;
+            ghost.style.left = x + 'px';
+            ghost.style.top = y + 'px';
+            document.body.appendChild(ghost);
+        };
+
+        const handleStart = (e) => {
+            if (state.view === 'iso') return; // iso 模式禁止新增
+            if (e.type === 'touchstart' && e.touches.length > 1) return;
+            const t = e.type === 'touchstart' ? e.touches[0] : e;
+            const target = e.currentTarget;
+            startX = t.clientX; startY = t.clientY;
+            if (e.type === 'touchstart') activeTouchId = t.identifier;
+
+            target.classList.add('pressing');
+            const delay = e.type === 'touchstart' ? 300 : 0;
+
+            pressTimer = setTimeout(() => {
+                target.classList.remove('pressing');
+                dragItemData = {
+                    type: target.dataset.type,
+                    w: parseFloat(target.dataset.w),
+                    h: parseFloat(target.dataset.h),
+                    color: target.dataset.color,
+                    label: target.querySelector('.item-name').textContent,
+                    shape: target.dataset.shape || '',
+                    height: target.dataset.height ? parseFloat(target.dataset.height) : undefined
+                };
+                createGhost(t.clientX, t.clientY, dragItemData);
+                if (e.type === 'touchstart') {
+                    document.addEventListener('touchmove', globalTouchMove, {passive:false});
+                    document.addEventListener('touchend', globalTouchEnd);
+                } else {
+                    document.addEventListener('mousemove', globalMouseMove);
+                    document.addEventListener('mouseup', globalMouseUp);
+                }
+            }, delay);
+        };
+
+        const handleMoveCheck = (e) => {
+            if (pressTimer) {
+                const t = e.type === 'touchmove' ? e.touches[0] : e;
+                if (Math.abs(t.clientX - startX) > 10 || Math.abs(t.clientY - startY) > 10) {
+                    clearTimeout(pressTimer);
+                    pressTimer = null;
+                    e.currentTarget.classList.remove('pressing');
+                }
+            }
+        };
+
+        const handleEndCheck = (e) => {
+            if (pressTimer) {
+                clearTimeout(pressTimer);
+                pressTimer = null;
+                e.currentTarget.classList.remove('pressing');
+            }
+        };
+
+        function bindCard(item) {
+            item.addEventListener('touchstart', handleStart, {passive:true});
+            item.addEventListener('touchmove', handleMoveCheck, {passive:true});
+            item.addEventListener('touchend', handleEndCheck);
+            item.addEventListener('mousedown', handleStart);
+        }
+        sidebarItems.forEach(bindCard);
+        bindEquipCard = bindCard; // 供新增自訂器材時掛事件
+
+        const updateGhost = (x, y) => {
+            if (ghost) {
+                ghost.style.left = x + 'px';
+                ghost.style.top = y + 'px';
+            }
+        };
+
+        const globalTouchMove = (e) => {
+            e.preventDefault();
+            for(let i=0; i<e.changedTouches.length; i++) {
+                if(e.changedTouches[i].identifier === activeTouchId) {
+                    updateGhost(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+                }
+            }
+        };
+        const globalMouseMove = (e) => { e.preventDefault(); updateGhost(e.clientX, e.clientY); };
+
+        const dropItem = (x, y) => {
+            document.removeEventListener('touchmove', globalTouchMove);
+            document.removeEventListener('touchend', globalTouchEnd);
+            document.removeEventListener('mousemove', globalMouseMove);
+            document.removeEventListener('mouseup', globalMouseUp);
+
+            if (!ghost) return;
+            const r = canvas.getBoundingClientRect();
+            if (state.view === '2d' && x > r.left && x < r.right && y > r.top && y < r.bottom) {
+                const ppm = getPixelsPerMeter();
+                const mx = (x - r.left) / ppm;
+                const my = (y - r.top) / ppm;
+                addItem(dragItemData, mx, my);
+            }
+            ghost.remove();
+            ghost = null;
+        };
+
+        const globalTouchEnd = (e) => dropItem(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+        const globalMouseUp = (e) => dropItem(e.clientX, e.clientY);
+    }
+
+    // --- Canvas Interaction ---
+    function setupCanvasInteractions() {
+        const getPos = (e) => {
+            const r = canvas.getBoundingClientRect();
+            let cx, cy;
+            if (e.type.includes('touch')) {
+                cx = e.touches[0].clientX;
+                cy = e.touches[0].clientY;
+            } else {
+                cx = e.clientX;
+                cy = e.clientY;
+            }
+            const ppm = getPixelsPerMeter();
+            return {
+                x: (cx - r.left) / ppm,
+                y: (cy - r.top) / ppm,
+            };
+        };
+
+        const start = (e) => {
+            if (state.view === 'iso') return; // iso 唯讀
+            if (e.type === 'touchstart' && e.touches.length > 1) return;
+            const pos = getPos(e);
+
+            // 0. Resize Room Handle (右下角)
+            const roomW = state.roomW;
+            const roomL = state.roomL;
+            // 距離檢測 (寬容度)
+            const dist = Math.sqrt(Math.pow(pos.x - roomW, 2) + Math.pow(pos.y - roomL, 2));
+            if (dist < HANDLE_RADIUS) {
+                state.mode = 'resize-room';
+                state.startPos = pos;
+                e.preventDefault();
+                bindGlobalEvents(e.type);
+                return;
+            }
+
+            // 1. Resize Item Handle
+            if (state.selectedIndex !== -1) {
+                const item = state.items[state.selectedIndex];
+                const handleX = item.x + item.w;
+                const handleY = item.y + item.h;
+                const distItem = Math.sqrt(Math.pow(pos.x - handleX, 2) + Math.pow(pos.y - handleY, 2));
+
+                if (distItem < HANDLE_RADIUS) {
+                    state.mode = 'resize-item';
+                    state.targetIndex = state.selectedIndex;
+                    state.startPos = pos;
+                    state.originalItemState = { ...item };
+                    e.preventDefault();
+                    bindGlobalEvents(e.type);
+                    return;
+                }
+            }
+
+            // 2. Drag Item
+            let found = -1;
+            for (let i = state.items.length - 1; i >= 0; i--) {
+                const it = state.items[i];
+                if (pos.x >= it.x && pos.x <= it.x + it.w &&
+                    pos.y >= it.y && pos.y <= it.y + it.h) {
+                    found = i;
+                    break;
+                }
+            }
+
+            if (found !== -1) {
+                state.mode = 'drag-item';
+                state.targetIndex = found;
+                state.selectedIndex = found;
+                state.startPos = pos;
+                state.originalItemState = { ...state.items[found] };
+                // 不再自動把選取物移到最上層；層級改由「層級」按鈕手動控制 (v2.4)
+                e.preventDefault();
+                bindGlobalEvents(e.type);
+            } else {
+                state.mode = 'none';
+                state.selectedIndex = -1;
+            }
+            draw();
+        };
+
+        const bindGlobalEvents = (type) => {
+            if (type === 'touchstart') {
+                document.addEventListener('touchmove', onGlobalMove, {passive:false});
+                document.addEventListener('touchend', onGlobalEnd);
+            } else {
+                document.addEventListener('mousemove', onGlobalMove);
+                document.addEventListener('mouseup', onGlobalEnd);
+            }
+        };
+
+        const onGlobalMove = (e) => {
+            if (state.mode === 'none') return;
+            e.preventDefault();
+
+            // 重新計算位置 (Global Mouse Position -> Canvas Grid)
+            const r = canvas.getBoundingClientRect();
+            let cx, cy;
+            if (e.type.includes('touch')) {
+                cx = e.touches[0].clientX;
+                cy = e.touches[0].clientY;
+            } else {
+                cx = e.clientX;
+                cy = e.clientY;
+            }
+
+            const ppm = getPixelsPerMeter();
+            const currentX = (cx - r.left) / ppm;
+            const currentY = (cy - r.top) / ppm;
+
+            const dx = currentX - state.startPos.x;
+            const dy = currentY - state.startPos.y;
+
+            if (state.mode === 'resize-room') {
+                // 直接依據滑鼠位置決定大小 (對齊 0.5m)
+                let newW = Math.max(MIN_SIZE, Math.round(currentX / 0.5) * 0.5);
+                let newL = Math.max(MIN_SIZE, Math.round(currentY / 0.5) * 0.5);
+                state.roomW = newW;
+                state.roomL = newL;
+                inputW.value = newW;
+                inputL.value = newL;
+                updateCanvasSize(false);
+
+            } else if (state.mode === 'drag-item') {
+                const item = state.items[state.targetIndex];
+                item.x = state.originalItemState.x + dx;
+                item.y = state.originalItemState.y + dy;
+                draw();
+            } else if (state.mode === 'resize-item') {
+                const item = state.items[state.targetIndex];
+                let newW = state.originalItemState.w + dx;
+                let newH = state.originalItemState.h + dy;
+                newW = Math.max(ITEM_MIN, newW);
+                newH = Math.max(ITEM_MIN, newH);
+                item.w = newW;
+                item.h = newH;
+                draw();
+            }
+        };
+
+        const onGlobalEnd = (e) => {
+            document.removeEventListener('touchmove', onGlobalMove);
+            document.removeEventListener('touchend', onGlobalEnd);
+            document.removeEventListener('mousemove', onGlobalMove);
+            document.removeEventListener('mouseup', onGlobalEnd);
+
+            if (state.mode !== 'none') {
+                if (state.mode === 'drag-item') {
+                    const item = state.items[state.targetIndex];
+                    item.x = Math.round(item.x / GRID_STEP) * GRID_STEP;
+                    item.y = Math.round(item.y / GRID_STEP) * GRID_STEP;
+                    item.x = Math.max(0, Math.min(item.x, state.roomW - item.w));
+                    item.y = Math.max(0, Math.min(item.y, state.roomL - item.h));
+                } else if (state.mode === 'resize-item') {
+                    const item = state.items[state.targetIndex];
+                    item.w = Math.max(ITEM_MIN, Math.round(item.w / GRID_STEP) * GRID_STEP);
+                    item.h = Math.max(ITEM_MIN, Math.round(item.h / GRID_STEP) * GRID_STEP);
+                } else if (state.mode === 'resize-room') {
+                    clampItemsToRoom(); // 拖小場地後把超界器材推回牆內
+                }
+                state.mode = 'none';
+                persist();
+                draw();
+            }
+        };
+
+        canvas.addEventListener('mousedown', start);
+        canvas.addEventListener('touchstart', start, {passive:false});
+
+        canvas.addEventListener('dblclick', (e) => {
+            if (state.view === 'iso') return;
+            const pos = getPos(e);
+            for (let i = state.items.length - 1; i >= 0; i--) {
+                const it = state.items[i];
+                if (pos.x >= it.x && pos.x <= it.x + it.w && pos.y >= it.y && pos.y <= it.y + it.h) {
+                    state.items.splice(i, 1);
+                    state.selectedIndex = -1;
+                    persist();
+                    draw();
+                    break;
+                }
+            }
+        });
+    }
+
+    function clampItemsToRoom() {
+        state.items.forEach(it => {
+            it.x = Math.max(0, Math.min(it.x, state.roomW - it.w));
+            it.y = Math.max(0, Math.min(it.y, state.roomL - it.h));
+        });
+    }
+
+    function addItem(data, mx, my) {
+        let w = data.w;
+        let h = data.h;
+        // 磁吸對齊
+        let x = Math.round((mx - w/2) / GRID_STEP) * GRID_STEP;
+        let y = Math.round((my - h/2) / GRID_STEP) * GRID_STEP;
+        // 邊界檢查
+        x = Math.max(0, Math.min(x, state.roomW - w));
+        y = Math.max(0, Math.min(y, state.roomL - h));
+
+        state.items.push({
+            id: Date.now(),
+            x: x, y: y, w: w, h: h,
+            color: data.color,
+            label: data.label,
+            type: data.type || '',
+            shape: data.shape || '',
+            height: (typeof data.height === 'number' ? data.height : undefined)
+        });
+        state.selectedIndex = state.items.length - 1;
+        persist();
+        draw();
+    }
+
+    // 調整選取物的層級 (v2.4)：front=最上, back=最下, up/down=一層
+    function moveLayer(dir) {
+        const i = state.selectedIndex;
+        if (i < 0) return;
+        const arr = state.items;
+        let ni = i;
+        if (dir === 'front') ni = arr.length - 1;
+        else if (dir === 'back') ni = 0;
+        else if (dir === 'up') ni = Math.min(arr.length - 1, i + 1);
+        else if (dir === 'down') ni = Math.max(0, i - 1);
+        if (ni === i) return;
+        const it = arr.splice(i, 1)[0];
+        arr.splice(ni, 0, it);
+        state.selectedIndex = ni;
+        persist();
+        draw();
+    }
+
+    function rotateSelectedItem() {
+        if (state.selectedIndex === -1) return;
+        const item = state.items[state.selectedIndex];
+        const temp = item.w;
+        item.w = item.h;
+        item.h = temp;
+        // 簡單推回邊界
+        if (item.x + item.w > state.roomW) item.x = state.roomW - item.w;
+        if (item.y + item.h > state.roomL) item.y = state.roomL - item.h;
+        persist();
+        draw();
+    }
+
+    function deleteSelectedItem() {
+        if (state.selectedIndex === -1) return;
+        state.items.splice(state.selectedIndex, 1);
+        state.selectedIndex = -1;
+        persist();
+        draw();
+    }
+
+    function clearAllItems() {
+        if (state.items.length > 0 && confirm('確定要清空畫布嗎？')) {
+            state.items = [];
+            state.selectedIndex = -1;
+            persist();
+            draw();
+        }
+    }
+
+    // --- 自訂器材 (v2.4) ---
+    function createEquipCard(def) {
+        const div = document.createElement('div');
+        div.className = 'equip-item';
+        div.dataset.type = def.type || 'custom';
+        div.dataset.w = def.w;
+        div.dataset.h = def.h;
+        div.dataset.color = def.color;
+        div.dataset.shape = def.shape || 'box';
+        div.dataset.height = def.height;
+        div.innerHTML =
+            '<div class="item-color" style="background:' + def.color + ';"></div>' +
+            '<div class="item-name">' + def.name + '</div>' +
+            '<div class="item-size">' + def.w + ' x ' + def.h + '</div>';
+        const del = document.createElement('div');
+        del.className = 'equip-del';
+        del.textContent = '×';
+        del.title = '移除此自訂器材';
+        del.addEventListener('mousedown', (e) => e.stopPropagation());
+        del.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+        del.addEventListener('click', (e) => { e.stopPropagation(); removeCustomEquip(def.id, div); });
+        div.appendChild(del);
+        document.querySelector('.equipment-grid').appendChild(div);
+        if (bindEquipCard) bindEquipCard(div);
+    }
+
+    function loadCustomEquip() {
+        try {
+            const raw = localStorage.getItem(CUSTOM_KEY);
+            if (raw) {
+                customEquip = JSON.parse(raw) || [];
+                customEquip.forEach(createEquipCard);
+            }
+        } catch (e) { customEquip = []; }
+    }
+
+    function saveCustomEquip() {
+        try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(customEquip)); } catch (e) {}
+    }
+
+    function addCustomEquip() {
+        const name = (document.getElementById('ce-name').value || '').trim();
+        if (!name) { alert('請輸入器材名稱'); return; }
+        const def = {
+            id: 'ce' + Date.now(),
+            type: 'custom',
+            name: name,
+            w: Math.max(0.5, parseFloat(document.getElementById('ce-w').value) || 1),
+            h: Math.max(0.5, parseFloat(document.getElementById('ce-h').value) || 1),
+            height: Math.max(0.05, parseFloat(document.getElementById('ce-height').value) || 1.2),
+            color: document.getElementById('ce-color').value || '#26a69a',
+            shape: document.getElementById('ce-shape').value || 'box'
+        };
+        customEquip.push(def);
+        saveCustomEquip();
+        createEquipCard(def);
+        document.getElementById('ce-name').value = '';
+    }
+
+    function removeCustomEquip(id, el) {
+        customEquip = customEquip.filter(d => d.id !== id);
+        saveCustomEquip();
+        if (el) el.remove();
+    }
+
+    init();
+
+</script>
+</body>
+</html>
