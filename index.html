@@ -1282,14 +1282,31 @@
         return location.origin + location.pathname + '#d=' + enc;
     }
 
-    function shareDesign() {
-        const url = buildShareUrl();
-        const fallback = () => window.prompt('複製這個連結分享給對方：', url);
+    async function shareDesign() {
+        const longUrl = buildShareUrl();
+        const btn = document.getElementById('btn-share');
+        const orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '⏳ 產生短網址中…';
+
+        let shareUrl = longUrl, shortened = false;
+        try {
+            const r = await fetch('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(longUrl));
+            if (r.ok) {
+                const t = (await r.text()).trim();
+                if (/^https?:\/\/tinyurl\.com\//.test(t)) { shareUrl = t; shortened = true; }
+            }
+        } catch (e) { /* 離線或被擋 → 退回長網址 */ }
+
+        btn.disabled = false;
+        btn.innerHTML = orig;
+
+        const msg = shortened
+            ? '短網址已複製！\n' + shareUrl + '\n\n貼給對方，他打開就會看到這張設計。'
+            : '短網址服務暫時無法使用，已複製完整連結（較長但一樣可用）。';
+        const fallback = () => window.prompt(shortened ? '複製這個短網址分享：' : '複製這個連結分享：', shareUrl);
         if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(url).then(
-                () => alert('分享連結已複製！\n貼給對方，他打開就會看到這張設計。'),
-                fallback
-            );
+            navigator.clipboard.writeText(shareUrl).then(() => alert(msg), fallback);
         } else {
             fallback();
         }
